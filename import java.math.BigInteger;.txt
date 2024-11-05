@@ -1,0 +1,144 @@
+import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.Map;
+
+public class ShamirSecretSharing {
+
+    public static void main(String[] args) {
+        // Hardcoded JSON content as a concatenated string
+        String jsonContent = "{\n" +
+                "    \"keys\": {\n" +
+                "        \"n\": \"4\",\n" +
+                "        \"k\": \"3\"\n" +
+                "    },\n" +
+                "    \"1\": {\n" +
+                "        \"base\": \"10\",\n" +
+                "        \"value\": \"4\"\n" +
+                "    },\n" +
+                "    \"2\": {\n" +
+                "        \"base\": \"2\",\n" +
+                "        \"value\": \"111\"\n" +
+                "    },\n" +
+                "    \"3\": {\n" +
+                "        \"base\": \"10\",\n" +
+                "        \"value\": \"12\"\n" +
+                "    },\n" +
+                "    \"6\": {\n" +
+                "        \"base\": \"4\",\n" +
+                "        \"value\": \"123\"\n" +
+                "    }\n" +
+                "}";
+
+        // Parse JSON and extract the test case values
+        Map<String, Map<String, String>> testCases = parseJson(jsonContent);
+
+        // Extract the n and k values
+        if (!testCases.containsKey("keys")) {
+            System.out.println("Error: JSON does not contain 'n' and 'k' values.");
+            return;
+        }
+
+        Map<String, String> keys = testCases.get("keys");
+        int n = Integer.parseInt(keys.getOrDefault("n", "0"));
+        int k = Integer.parseInt(keys.getOrDefault("k", "0"));
+
+        if (n == 0 || k == 0) {
+            System.out.println("Error: JSON does not contain valid 'n' and 'k' values.");
+            return;
+        }
+
+        // Parse and decode y values based on base and store x, y pairs
+        int[] xValues = new int[k];
+        BigInteger[] yValues = new BigInteger[k];
+        int count = 0;
+
+        for (String key : testCases.keySet()) {
+            if (key.equals("keys")) continue;
+            int x = Integer.parseInt(key);
+
+            Map<String, String> point = testCases.get(key);
+            if (point == null || !point.containsKey("base") || !point.containsKey("value")) {
+                System.out.println("Error: Missing 'base' or 'value' for point " + key);
+                continue;
+            }
+
+            int base = Integer.parseInt(point.get("base"));
+            String encodedValue = point.get("value");
+
+            BigInteger y = new BigInteger(encodedValue, base);
+            if (count < k) {
+                xValues[count] = x;
+                yValues[count] = y;
+                count++;
+            }
+        }
+
+        // Calculate the constant term (secret) using Lagrange interpolation
+        BigInteger secret = lagrangeInterpolation(xValues, yValues, BigInteger.ZERO);
+        System.out.println("Secret (c): " + secret);
+    }
+
+    private static BigInteger lagrangeInterpolation(int[] xValues, BigInteger[] yValues, BigInteger x) {
+        BigInteger result = BigInteger.ZERO;
+        int k = xValues.length;
+
+        for (int i = 0; i < k; i++) {
+            BigInteger term = yValues[i];
+
+            for (int j = 0; j < k; j++) {
+                if (i != j) {
+                    BigInteger numerator = x.subtract(BigInteger.valueOf(xValues[j]));
+                    BigInteger denominator = BigInteger.valueOf(xValues[i] - xValues[j]);
+                    term = term.multiply(numerator).divide(denominator);
+                }
+            }
+
+            result = result.add(term);
+        }
+
+        return result;
+    }
+
+    private static Map<String, Map<String, String>> parseJson(String json) {
+        Map<String, Map<String, String>> result = new HashMap<>();
+
+        // Separate "keys" section manually
+        if (json.contains("\"keys\":")) {
+            int keysStart = json.indexOf("\"keys\":") + 7;
+            int keysEnd = json.indexOf("}", keysStart) + 1;
+            String keysContent = json.substring(keysStart, keysEnd)
+                                      .replaceAll("[{}\"]", "")
+                                      .trim();
+            Map<String, String> keysMap = new HashMap<>();
+            for (String entry : keysContent.split(",")) {
+                String[] pair = entry.split(":");
+                if (pair.length == 2) {
+                    keysMap.put(pair[0].trim(), pair[1].trim());
+                }
+            }
+            result.put("keys", keysMap);
+        }
+
+        // Separate remaining points
+        String[] entries = json.split("},\\s*\"");
+        for (String entry : entries) {
+            entry = entry.replaceAll("[{}\"]", "").trim();
+            if (entry.startsWith("keys")) continue;
+
+            String[] parts = entry.split(":", 2);
+            if (parts.length < 2) continue;
+
+            String key = parts[0].trim();
+            String[] attributes = parts[1].split(",");
+            Map<String, String> values = new HashMap<>();
+            for (String attribute : attributes) {
+                String[] pair = attribute.split(":");
+                if (pair.length == 2) {
+                    values.put(pair[0].trim(), pair[1].trim());
+                }
+            }
+            result.put(key, values);
+        }
+        return result;
+    }
+}
